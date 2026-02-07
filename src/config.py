@@ -1,3 +1,12 @@
+import logging
+
+# Общий логер для приложения
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S",
+)
+
 # Конфигурация для Kafka
 KAFKA_BOOTSTRAP_CONFIG = {
     "bootstrap.servers": "localhost:9094",
@@ -10,4 +19,3 @@ BATCH_SIZE = 10
 
 # Названия топика для тестов
 TEST_TOPIC_NAME = "test-topic-homework-1"
-

@@ -1,4 +1,5 @@
 import asyncio
+import logging
 from collections.abc import Awaitable, Callable, Mapping
 from typing import Any
 
@@ -45,6 +46,8 @@ class SingleMessageConsumer:
             self.topics = tuple(topics)
         if not self.topics:
             raise ValueError("topics must not be empty")
+
+        self._logger = logging.getLogger(f"{__name__}.{self.__class__.__name__}")
         
         self.__consumer = AIOConsumer(
             {
@@ -91,7 +94,7 @@ class SingleMessageConsumer:
         
         while True:
             if self._stop_event and self._stop_event.is_set():
-                print("SingleMessageConsumer: stop_event set, exiting")
+                self._logger.info("stop_event set, exiting")
                 return
             try:
                 msg = await self.__consumer.poll(timeout=1.0)
@@ -107,7 +110,7 @@ class SingleMessageConsumer:
                         raise RuntimeError(f"Kafka fatal error: {err}")
                     
                     # остальные — логируем и продолжаем
-                    print(f"SingleMessageConsumer error: {err}")
+                    self._logger.warning("error: %s", err)
                     continue
                 
                 if self._handler is not None:
@@ -115,15 +118,15 @@ class SingleMessageConsumer:
                 else:
                     val = msg.value()
                     if val is None:
-                        print("SingleMessageConsumer received: <NULL>")
+                        self._logger.info("received: <NULL>")
                     else:
-                        print(f"SingleMessageConsumer received:{val.decode('utf-8')}")
-                    
+                        self._logger.info("received: %s", val.decode("utf-8"))
+
             except asyncio.CancelledError:
-                print('SingleMessageConsumer: Cancellation requested')
+                self._logger.info("Cancellation requested")
                 raise
             except Exception as e:
-                print(f'Consumer polling error: {e}')
+                self._logger.error("polling error: %s", e, exc_info=True)
                 await asyncio.sleep(1)
 
 
@@ -168,6 +171,7 @@ class BatchMessageConsumer:
         if not self.topics:
             raise ValueError("topics must not be empty")
 
+        self._logger = logging.getLogger(f"{__name__}.{self.__class__.__name__}")
         self.__consumer = AIOConsumer(
             {
                 **kafka_bootstrap_config,
@@ -218,7 +222,7 @@ class BatchMessageConsumer:
 
         while True:
             if self._stop_event and self._stop_event.is_set():
-                print("BatchMessageConsumer: stop_event set, exiting")
+                self._logger.info("stop_event set, exiting")
                 return
 
             batch: list[Any] = []
@@ -239,7 +243,7 @@ class BatchMessageConsumer:
                             continue
                         if getattr(err, "fatal", None) and err.fatal():
                             raise RuntimeError(f"Kafka fatal error: {err}")
-                        print(f"BatchMessageConsumer error: {err}")
+                        self._logger.warning("error: %s", err)
                         continue
 
                     batch.append(msg)
@@ -250,21 +254,26 @@ class BatchMessageConsumer:
                 if self._handler is not None:
                     await self._handler(batch)
                 else:
-                    print(f"BatchMessageConsumer received {len(batch)} messages...")
+                    self._logger.info("received %d messages", len(batch))
                     for idx, m in enumerate(batch):
                         val = m.value()
                         s = val.decode("utf-8") if val else "<NULL>"
-                        print(f"{idx + 1}: {s} (p={m.partition()}, o={m.offset()})")
+                        self._logger.debug(
+                            "%d: %s (p=%s, o=%s)",
+                            idx + 1,
+                            s,
+                            m.partition(),
+                            m.offset(),
+                        )
 
                 await self.__consumer.commit(asynchronous=False)
 
             except asyncio.CancelledError:
-                print("BatchMessageConsumer: Cancellation requested")
+                self._logger.info("Cancellation requested")
                 raise
             except Exception as e:
-                print(f"BatchMessageConsumer processing error: {e}")
+                self._logger.error("processing error: %s", e, exc_info=True)
                 await asyncio.sleep(1)
-
 
 
 

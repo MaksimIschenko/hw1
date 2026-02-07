@@ -1,4 +1,5 @@
 import asyncio
+import logging
 
 from src.config import (
     BATCH_SIZE,
@@ -12,6 +13,8 @@ from src.consumer import (
     SingleMessageConsumer,
 )
 from src.producer import Producer
+
+logger = logging.getLogger(__name__)
 
 
 async def producer_runner(stop_event: asyncio.Event) -> None:
@@ -63,7 +66,7 @@ async def main():
             batch_msgs_consumer_task
         )
     except KeyboardInterrupt:
-        print("\nShutting down...")
+        logger.info("Shutting down...")
         stop_event.set()  # попросим consumer выйти сам
 
         producer_task.cancel()
@@ -78,7 +81,7 @@ async def main():
         )
 
     except Exception as e:
-        print(f"Error in main: {e}")
+        logger.error("Error in main: %s", e, exc_info=True)
         raise
 
 
@@ -86,5 +89,5 @@ if __name__ == "__main__":
     try:
         asyncio.run(main())
     except KeyboardInterrupt:
-        print("\nStopped.")
+        logger.info("Stopped.")
         raise SystemExit(0) from None

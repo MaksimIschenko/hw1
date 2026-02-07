@@ -1,4 +1,5 @@
 import asyncio
+import logging
 import uuid
 from collections.abc import Mapping
 from typing import Any
@@ -40,6 +41,7 @@ class Producer:
         if not topic:
             raise ValueError("topic must not be empty")
 
+        self._logger = logging.getLogger(f"{__name__}.{self.__class__.__name__}")
         self._topic = topic
         self._stop_event = stop_event
         self.__producer = AIOProducer(
@@ -112,20 +114,23 @@ class Producer:
         count = 0
         while True:
             if self._stop_event and self._stop_event.is_set():
-                print("Producer: stop_event set, exiting")
+                self._logger.info("stop_event set, exiting")
                 return
 
             try:
                 value = f"message_count_{count}"
                 msg = await self.send(value)
-                print(
-                    f"Producer delivered to {msg.topic()} [{msg.partition()}] @ {msg.offset()}"
+                self._logger.info(
+                    "Producer delivered to %s [%s] @ %s",
+                    msg.topic(),
+                    msg.partition(),
+                    msg.offset(),
                 )
                 count += 1
             except asyncio.CancelledError:
-                print("Producer: Cancellation requested")
+                self._logger.info("Cancellation requested")
                 raise
             except Exception as e:
-                print(f"Producer error: {e}")
+                self._logger.error("error: %s", e, exc_info=True)
 
             await asyncio.sleep(0.1)

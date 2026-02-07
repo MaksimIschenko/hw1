@@ -95,6 +95,22 @@ services:
       - KAFKA_CLUSTERS_0_BOOTSTRAP_SERVERS=kafka-0:9092,kafka-1:9092,kafka-2:9092
       - KAFKA_CLUSTERS_0_NAME=kraft
 
+  app:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    deploy:
+      replicas: 2
+    environment:
+      - KAFKA_BOOTSTRAP_SERVERS=kafka-0:9092,kafka-1:9092,kafka-2:9092
+      - SCHEMA_REGISTRY_URL=http://schema-registry:8081
+    depends_on:
+      schema-registry:
+        condition: service_started
+      kafka-0:
+        condition: service_healthy
+    restart: unless-stopped
+
 volumes:
   kafka_0_data:
   kafka_1_data:

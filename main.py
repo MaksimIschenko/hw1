@@ -1,11 +1,13 @@
 import asyncio
 import logging
 
+from src.avro import AvroContext
 from src.config import (
     BATCH_SIZE,
     CONSUMER_GROUP_ID_1,
     CONSUMER_GROUP_ID_2,
     KAFKA_BOOTSTRAP_CONFIG,
+    SCHEMA_REGISTRY_URL,
     TEST_TOPIC_NAME,
 )
 from src.consumer import (
@@ -13,21 +15,23 @@ from src.consumer import (
     SingleMessageConsumer,
 )
 from src.producer import Producer
+from src.schemas import USER_SCHEMA_STR
 
 logger = logging.getLogger(__name__)
 
 
-async def producer_runner(stop_event: asyncio.Event) -> None:
+async def producer_runner(stop_event: asyncio.Event, avro_ctx: AvroContext) -> None:
     """Run producer."""
     async with Producer(
         KAFKA_BOOTSTRAP_CONFIG,
         TEST_TOPIC_NAME,
         stop_event=stop_event,
+        value_serializer=avro_ctx.serializer,
     ) as producer:
         await producer.send_messages()
 
 
-async def single_consumer_runner(stop_event: asyncio.Event) -> None:
+async def single_consumer_runner(stop_event: asyncio.Event, avro_ctx: AvroContext) -> None:
     """Run single message consumer."""
     async with SingleMessageConsumer(
         kafka_bootstrap_config=KAFKA_BOOTSTRAP_CONFIG,
@@ -36,10 +40,11 @@ async def single_consumer_runner(stop_event: asyncio.Event) -> None:
         stop_event=stop_event,
         enable_auto_commit=True,
         auto_offset_reset="earliest",
+        value_deserializer=avro_ctx.deserializer,
     ) as consumer:
         await consumer.read_messages()
         
-async def batch_consumer_runner(stop_event: asyncio.Event) -> None:
+async def batch_consumer_runner(stop_event: asyncio.Event, avro_ctx: AvroContext) -> None:
     """Run batch messages consumer."""
     async with BatchMessageConsumer(
         KAFKA_BOOTSTRAP_CONFIG,
@@ -47,17 +52,22 @@ async def batch_consumer_runner(stop_event: asyncio.Event) -> None:
         TEST_TOPIC_NAME,
         batch_size=BATCH_SIZE,
         stop_event=stop_event,
+        value_deserializer=avro_ctx.deserializer,
     ) as consumer:
         await consumer.read_messages()
 
 
 async def main():
     stop_event = asyncio.Event()
+    avro_ctx = await AvroContext.create(
+        schema_registry_url=SCHEMA_REGISTRY_URL,
+        schema_str=USER_SCHEMA_STR,
+    )
 
     # Create tasks
-    producer_task = asyncio.create_task(producer_runner(stop_event))
-    single_msg_consumer_task = asyncio.create_task(single_consumer_runner(stop_event))
-    batch_msgs_consumer_task = asyncio.create_task(batch_consumer_runner(stop_event))
+    producer_task = asyncio.create_task(producer_runner(stop_event, avro_ctx))
+    single_msg_consumer_task = asyncio.create_task(single_consumer_runner(stop_event, avro_ctx))
+    batch_msgs_consumer_task = asyncio.create_task(batch_consumer_runner(stop_event, avro_ctx))
 
     try:
         await asyncio.gather(

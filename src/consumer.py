@@ -5,9 +5,11 @@ from typing import Any
 
 from confluent_kafka import KafkaError
 from confluent_kafka.aio import AIOConsumer
+from confluent_kafka.serialization import MessageField, SerializationContext
 
 MessageHandler = Callable[[Any], Awaitable[None]]
 BatchMessageHandler = Callable[[list[Any]], Awaitable[None]]
+ValueDeserializer = Callable[[bytes, SerializationContext], Awaitable[Any]]
 
 class SingleMessageConsumer:
     """Single message consumer"""
@@ -22,6 +24,7 @@ class SingleMessageConsumer:
         auto_offset_reset: str = 'earliest',
         stop_event: asyncio.Event | None = None,
         handler: MessageHandler | None = None,
+        value_deserializer: ValueDeserializer | None = None,
     ):
         """Initialize a SingleMessageConsumer.
 
@@ -59,6 +62,7 @@ class SingleMessageConsumer:
         )
         self._stop_event = stop_event
         self._handler = handler
+        self._value_deserializer = value_deserializer
         self._subscribed = False
         
     async def __aenter__(self):
@@ -120,12 +124,24 @@ class SingleMessageConsumer:
                     if val is None:
                         self._logger.info("received <NULL> (p=%s, o=%s)", msg.partition(), msg.offset())
                     else:
-                        self._logger.info(
-                            "received %s (p=%s, o=%s)",
-                            val.decode("utf-8"),
-                            msg.partition(),
-                            msg.offset(),
-                        )
+                        if self._value_deserializer is not None:
+                            val = await self._value_deserializer(
+                                val,
+                                SerializationContext(msg.topic(), MessageField.VALUE),
+                            )
+                            self._logger.info(
+                                "received %s (p=%s, o=%s)",
+                                val,
+                                msg.partition(),
+                                msg.offset(),
+                            )
+                        else:
+                            self._logger.info(
+                                "received %s (p=%s, o=%s)",
+                                val.decode("utf-8"),
+                                msg.partition(),
+                                msg.offset(),
+                            )
 
             except asyncio.CancelledError:
                 self._logger.info("cancellation requested")
@@ -149,6 +165,7 @@ class BatchMessageConsumer:
         auto_offset_reset: str = "earliest",
         stop_event: asyncio.Event | None = None,
         handler: BatchMessageHandler | None = None,
+        value_deserializer: ValueDeserializer | None = None,
     ):
         """Initialize a BatchMessageConsumer.
 
@@ -189,6 +206,7 @@ class BatchMessageConsumer:
         self._batch_size = batch_size
         self._stop_event = stop_event
         self._handler = handler
+        self._value_deserializer = value_deserializer
         self._subscribed = False
 
     async def __aenter__(self) -> "BatchMessageConsumer":
@@ -262,7 +280,15 @@ class BatchMessageConsumer:
                     self._logger.info("received %d messages", len(batch))
                     for idx, m in enumerate(batch):
                         val = m.value()
-                        s = val.decode("utf-8") if val else "<NULL>"
+                        if val is None:
+                            s = "<NULL>"
+                        elif self._value_deserializer is not None:
+                            s = await self._value_deserializer(
+                                val,
+                                SerializationContext(m.topic(), MessageField.VALUE),
+                            )
+                        else:
+                            s = val.decode("utf-8")
                         self._logger.info(
                             "%d: %s (p=%s, o=%s)",
                             idx + 1,

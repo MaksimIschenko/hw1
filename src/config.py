@@ -15,6 +15,8 @@ KAFKA_BOOTSTRAP_CONFIG = {
     "bootstrap.servers": "localhost:9094",
 }
 
+SCHEMA_REGISTRY_URL = "http://localhost:8082"
+
 CONSUMER_GROUP_ID_1 = "consumer-group-1"
 CONSUMER_GROUP_ID_2 = "consumer-group-2"
 

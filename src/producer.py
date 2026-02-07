@@ -1,10 +1,13 @@
 import asyncio
 import logging
 import uuid
-from collections.abc import Mapping
+from collections.abc import Awaitable, Callable, Mapping
 from typing import Any
 
 from confluent_kafka.aio import AIOProducer
+from confluent_kafka.serialization import MessageField, SerializationContext
+
+from .schemas import User
 
 
 class Producer:
@@ -20,6 +23,7 @@ class Producer:
         retries: int = 3,
         linger_ms: int = 5,
         stop_event: asyncio.Event | None = None,
+        value_serializer: Callable[[Any, SerializationContext], Awaitable[bytes]] | None = None,
     ):
         """Initialize a Producer.
 
@@ -37,6 +41,8 @@ class Producer:
         :type linger_ms: int, optional
         :param stop_event: Optional event to signal producer to stop (default: None).
         :type stop_event: asyncio.Event | None, optional
+        :param value_serializer: Optional async function to serialize values before sending (default: None).
+        :type value_serializer: Callable[[Any, SerializationContext], Awaitable[bytes]] | None, optional
         """
         if not topic:
             raise ValueError("topic must not be empty")
@@ -44,6 +50,7 @@ class Producer:
         self._logger = logging.getLogger(f"{__name__}.{self.__class__.__name__}")
         self._topic = topic
         self._stop_event = stop_event
+        self._value_serializer = value_serializer
         self.__producer = AIOProducer(
             {
                 **kafka_bootstrap_config,
@@ -86,11 +93,16 @@ class Producer:
         """
         if not self._started:
             raise RuntimeError(
-                "Producer must be used as context manager (async with) before sending"
+                "must be used as context manager (async with) before sending"
             )
         if key is None:
             key = str(uuid.uuid4())
-        if isinstance(value, str):
+        if self._value_serializer is not None:
+            value = await self._value_serializer(
+                value,
+                SerializationContext(self._topic, MessageField.VALUE),
+            )
+        elif isinstance(value, str):
             value = value.encode("utf-8")
         future = await self.__producer.produce(
             topic=self._topic,
@@ -108,7 +120,7 @@ class Producer:
         """
         if not self._started:
             raise RuntimeError(
-                "Producer must be used as context manager (async with) before running"
+                "must be used as context manager (async with) before running"
             )
 
         count = 0
@@ -118,7 +130,10 @@ class Producer:
                 return
 
             try:
-                value = f"message_count_{count}"
+                if self._value_serializer is not None:
+                    value = User(name=f"user_{count}").to_dict()
+                else:
+                    value = f"message_count_{count}"
                 msg = await self.send(value)
                 self._logger.info(
                     "delivered to %s (p=%s, o=%s)",
@@ -128,7 +143,7 @@ class Producer:
                 )
                 count += 1
             except asyncio.CancelledError:
-                self._logger.info("Cancellation requested")
+                self._logger.info("cancellation requested")
                 raise
             except Exception as e:
                 self._logger.error("error: %s", e, exc_info=True)

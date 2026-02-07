@@ -1,0 +1,76 @@
+[project]
+name = "hw1"
+version = "0.1.0"
+description = "Homework assignment for Yandex.Practicum course, Module 1"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "confluent-kafka>=2.5.0",
+    "ruff>=0.14.14",
+]
+
+
+# -----------------------------
+# Ruff (линтер + форматтер)
+# -----------------------------
+[tool.ruff]
+src = ["src"]
+line-length = 100
+target-version = "py312"
+exclude = [
+    ".venv",
+    "venv",
+    "__pycache__",
+    "build",
+    "dist",
+]
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle
+    "F",   # pyflakes
+    "I",   # isort
+    "B",   # flake8-bugbear
+    "UP",  # pyupgrade
+    "N",   # pep8-naming
+]
+ignore = [
+    "E501",  # длина строки
+    "B905",  # zip без strict=True
+]
+
+[tool.ruff.lint.isort]
+combine-as-imports = true
+force-single-line = false
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+line-ending = "auto"
+docstring-code-format = true
+
+# -----------------------------
+# MyPy (проверка типов)
+# -----------------------------
+[tool.mypy]
+# Основные настройки
+python_version = "3.12"
+warn_unused_configs = true
+warn_unused_ignores = true
+warn_redundant_casts = true
+warn_return_any = true
+warn_unreachable = true
+strict = true
+
+# Пути к исходникам
+mypy_path = ["src"]
+
+# Игнорировать определённые каталоги
+exclude = "(venv|.venv|build|dist|__pycache__)"
+
+# Проверка импортов и типизация сторонних библиотек
+ignore_missing_imports = true
+follow_imports = "silent"
+
+# Кэш для ускорения повторных запусков
+cache_dir = ".mypy_cache"

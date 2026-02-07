@@ -121,7 +121,7 @@ class Producer:
                 value = f"message_count_{count}"
                 msg = await self.send(value)
                 self._logger.info(
-                    "Producer delivered to %s [%s] @ %s",
+                    "delivered to %s (p=%s, o=%s)",
                     msg.topic(),
                     msg.partition(),
                     msg.offset(),

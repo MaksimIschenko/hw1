@@ -107,7 +107,7 @@ class SingleMessageConsumer:
                         continue
                     
                     if getattr(err, "fatal", None) and err.fatal():
-                        raise RuntimeError(f"Kafka fatal error: {err}")
+                        raise RuntimeError(f"kafka fatal error: {err}")
                     
                     # остальные — логируем и продолжаем
                     self._logger.warning("error: %s", err)
@@ -118,12 +118,17 @@ class SingleMessageConsumer:
                 else:
                     val = msg.value()
                     if val is None:
-                        self._logger.info("received: <NULL>")
+                        self._logger.info("received <NULL> (p=%s, o=%s)", msg.partition(), msg.offset())
                     else:
-                        self._logger.info("received: %s", val.decode("utf-8"))
+                        self._logger.info(
+                            "received %s (p=%s, o=%s)",
+                            val.decode("utf-8"),
+                            msg.partition(),
+                            msg.offset(),
+                        )
 
             except asyncio.CancelledError:
-                self._logger.info("Cancellation requested")
+                self._logger.info("cancellation requested")
                 raise
             except Exception as e:
                 self._logger.error("polling error: %s", e, exc_info=True)
@@ -242,7 +247,7 @@ class BatchMessageConsumer:
                         if err.code() == KafkaError._PARTITION_EOF:
                             continue
                         if getattr(err, "fatal", None) and err.fatal():
-                            raise RuntimeError(f"Kafka fatal error: {err}")
+                            raise RuntimeError(f"kafka fatal error: {err}")
                         self._logger.warning("error: %s", err)
                         continue
 
@@ -258,7 +263,7 @@ class BatchMessageConsumer:
                     for idx, m in enumerate(batch):
                         val = m.value()
                         s = val.decode("utf-8") if val else "<NULL>"
-                        self._logger.debug(
+                        self._logger.info(
                             "%d: %s (p=%s, o=%s)",
                             idx + 1,
                             s,
@@ -269,11 +274,8 @@ class BatchMessageConsumer:
                 await self.__consumer.commit(asynchronous=False)
 
             except asyncio.CancelledError:
-                self._logger.info("Cancellation requested")
+                self._logger.info("cancellation requested")
                 raise
             except Exception as e:
                 self._logger.error("processing error: %s", e, exc_info=True)
                 await asyncio.sleep(1)
-
-
-
